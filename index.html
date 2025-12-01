@@ -31,6 +31,7 @@
         <span class="title">工具切换：</span>
         <button id="tab-stitch" class="tab-btn active" data-target="stitch">图片拼接工具</button>
         <button id="tab-sign" class="tab-btn" data-target="sign">手写签名PNG</button>
+        <button id="tab-compress" class="tab-btn" data-target="compress">图片压缩</button>
         <button id="tab-more" class="tab-btn" data-target="more">更多功能····</button>
       </div>
     </header>
@@ -38,6 +39,7 @@
       <div class="frames">
         <iframe id="frame-stitch" class="tool-frame" title="图片拼接工具" aria-hidden="false"></iframe>
         <iframe id="frame-sign" class="tool-frame" title="手写签名PNG" aria-hidden="true"></iframe>
+        <iframe id="frame-compress" class="tool-frame" title="图片压缩" aria-hidden="true"></iframe>
         <iframe id="frame-more" class="tool-frame" title="更多功能" aria-hidden="true"></iframe>
       </div>
     </main>
@@ -799,6 +801,480 @@
 <!-- END: 图片拼接工具.html -->
     </template>
 
+    <template id="tpl-compress">
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standalone Image Compressor</title>
+    <style>
+      :root { --bg: #f7fafc; --fg: #1f2937; --muted: #6b7280; --primary: #111827; --border: #e5e7eb; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif; color: var(--fg); background: var(--bg); }
+      .container { max-width: 1600px; margin: 0 auto; padding: 24px; }
+      .card { background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+      .toolbar { display:flex; gap:12px; align-items:center; justify-content:space-between; padding: 12px; border-bottom:1px solid var(--border); }
+      .controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      .list { padding: 12px; }
+      .item { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); }
+      .thumb { width:48px; height:48px; border-radius:6px; overflow:hidden; margin-right:12px; flex-shrink:0; }
+      .thumb img { width:100%; height:100%; object-fit:cover; }
+      .meta { display:flex; align-items:center; max-width:60%; }
+      .name { font-weight:600; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .row { display:flex; gap:8px; color:var(--muted); font-size:12px; }
+      .right { display:flex; align-items:center; gap:8px; }
+      .button { padding:8px 12px; border:1px solid var(--border); border-radius:6px; background:#fff; cursor:pointer; }
+      .button.primary { background: var(--primary); color:#fff; border-color: var(--primary); }
+      .button.danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+      .button:disabled { opacity:.6; cursor:not-allowed; }
+      .tag { font-size:12px; padding:0 6px; height:20px; line-height:20px; border-radius:10px; border:1px solid var(--border); color:var(--muted); }
+      .small { font-size:12px; }
+      .title { text-align:center; font-size:28px; font-weight:800; margin: 16px 0 6px; }
+      .subtitle { text-align:center; color:var(--muted); font-size:14px; margin-bottom: 16px; }
+      input[type="range"] { width: 160px; }
+      .hidden { display:none; }
+      .drop-area { border:2px dashed var(--border); background:#fff; border-radius:8px; padding:24px; text-align:center; color:var(--muted); margin:12px; cursor:pointer; transition: all .12s ease-in-out; }
+      .drop-area.highlight { border-color:#60a5fa; background:#f0f9ff; color:#1d4ed8; }
+      .drop-area:hover { border-color:#60a5fa; background:#f0f9ff; color:#1d4ed8; }
+      .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:9999; }
+      .modal { background:#fff; border-radius:8px; border:1px solid var(--border); width: min(1200px, 96vw); max-height: 90vh; overflow: auto; }
+      .modal-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); }
+      .modal-body { padding:16px; }
+      .compare-box { position:relative; width:100%; aspect-ratio: 16/9; background:#f9fafb; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+      .compare-box img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+      .compare-top { position:absolute; inset:0; clip-path: polygon(0 0, var(--cmp, 50%) 0, var(--cmp, 50%) 100%, 0 100%); }
+      #compareBottomImg { z-index:1; }
+      #compareTopWrap { z-index:2; }
+      #compareHandle { z-index:3; }
+      .compare-label { z-index:0; }
+      @media (max-width: 640px) {
+        .container { padding: 12px; }
+        .title { font-size:22px; }
+        .subtitle { font-size:12px; }
+        .card { border-radius:10px; }
+        .toolbar { flex-direction: column; align-items: stretch; gap:10px; }
+        .controls { flex-wrap: wrap; }
+        .button { padding:10px 12px; font-size:14px; }
+        input[type="range"] { width: 100%; }
+        .drop-area { margin: 8px; padding: 20px; font-size: 13px; }
+        .item { flex-direction: column; align-items: flex-start; gap: 8px; }
+        .thumb { width: 40px; height: 40px; }
+        .meta { max-width: 100%; }
+        .right { width: 100%; justify-content: flex-end; }
+        .compare-box { height: 60vh; aspect-ratio: auto; }
+        .compare-handle { width: 36px; margin-left: -18px; }
+        .slider-icon { width: 44px; height: 44px; }
+        .slider-line { width: 3px; }
+      }
+      .compare-controls { display:flex; align-items:center; gap:8px; padding:12px 0; }
+      .hidden { display:none; }
+      .compare-handle { position:absolute; top:0; bottom:0; width:24px; margin-left:-12px; cursor:ew-resize; display:block; z-index:3; }
+      .slider-line { position:absolute; top:0; bottom:0; left:50%; transform:translateX(-50%); width:2px; background:#60a5fa; }
+      .slider-icon { position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); display:flex; align-items:center; justify-content:center; gap:6px; width:36px; height:36px; border-radius:50%; background:#fff; color:#1f2937; border:1px solid #e5e7eb; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+      .compare-label { position:absolute; top:8px; padding:4px 8px; font-size:12px; border-radius:999px; background:#111827; color:#fff; opacity:.8; pointer-events:none; }
+      .label-left { left:8px; }
+      .label-right { right:8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="title">图片压缩</h1>
+      <p class="subtitle">添加图片，选择格式与质量，生成压缩结果并下载。可以批量压缩图片。</p>
+      <div class="card">
+        <div class="toolbar">
+          <div class="controls">
+            <label class="button" for="fileInput">添加图片</label>
+            <input id="fileInput" type="file" accept="image/*" multiple class="hidden" />
+            <button id="clearBtn" class="button">清空</button>
+            <span class="small">压缩格式</span>
+            <select id="formatSelect" class="button">
+              <option value="auto">auto</option>
+              <option value="jpeg" selected>jpeg</option>
+              <option value="webp">webp</option>
+            </select>
+            <span class="small">质量</span>
+            <input id="qualityRange" type="range" min="10" max="95" value="50" />
+            <span id="qualityText" class="small">50</span>
+            <button id="recompressBtn" class="button">重新压缩</button>
+            <button id="downloadAllBtn" class="button primary">下载全部</button>
+          </div>
+          <div id="progressHint" class="small" style="color:var(--muted)"></div>
+        </div>
+        <div id="dropArea" class="drop-area">
+          点击或拖动图片到这个区域，或按 Ctrl+V 粘贴到这里
+        </div>
+      <div id="list" class="list"></div>
+      </div>
+    </div>
+
+    <div id="compareBackdrop" class="modal-backdrop hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <div id="compareTitle" class="small" style="font-size:14px; font-weight:600"></div>
+          <div>
+            <button id="compareCloseBtn" class="button">关闭</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div id="compareBox" class="compare-box">
+            <img id="compareBottomImg" alt="原图" />
+            <div id="compareTopWrap" class="compare-top" style="--cmp:50%">
+              <img id="compareTopImg" alt="压缩后" />
+            </div>
+            <div id="compareHandle" class="compare-handle" style="left:50%">
+              <div class="slider-line"></div>
+              <div class="slider-icon">
+                <span role="img" aria-label="left" class="anticon anticon-left">
+                  <svg viewBox="64 64 896 896" focusable="false" data-icon="left" width="1em" height="1em" fill="currentColor" aria-hidden="true">
+                    <path d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 000 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"></path>
+                  </svg>
+                </span>
+                <span role="img" aria-label="right" class="anticon anticon-right">
+                  <svg viewBox="64 64 896 896" focusable="false" data-icon="right" width="1em" height="1em" fill="currentColor" aria-hidden="true">
+                    <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z"></path>
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div class="compare-label label-left">压缩后</div>
+            <div class="compare-label label-right">原始</div>
+          </div>
+          <div class="compare-controls"><span class="small">滑动对比</span><span id="comparePercent" class="small">50%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const state = {
+        items: [],
+        option: {
+          format: { target: undefined, transparentFill: '#FFFFFF' },
+          jpeg: { quality: 0.7 },
+        },
+      };
+
+      const formatSelect = document.getElementById('formatSelect');
+      const qualityRange = document.getElementById('qualityRange');
+      const qualityText = document.getElementById('qualityText');
+      const fileInput = document.getElementById('fileInput');
+      const listEl = document.getElementById('list');
+      const progressHintEl = document.getElementById('progressHint');
+      const dropArea = document.getElementById('dropArea');
+      const downloadAllBtn = document.getElementById('downloadAllBtn');
+      const compareBackdrop = document.getElementById('compareBackdrop');
+      const compareTitle = document.getElementById('compareTitle');
+      const compareCloseBtn = document.getElementById('compareCloseBtn');
+      const compareBottomImg = document.getElementById('compareBottomImg');
+      const compareTopImg = document.getElementById('compareTopImg');
+      const compareTopWrap = document.getElementById('compareTopWrap');
+      const compareBox = document.getElementById('compareBox');
+      const compareHandle = document.getElementById('compareHandle');
+      const comparePercent = document.getElementById('comparePercent');
+      let compareItemKey = null;
+
+      const Mimes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', png: 'image/png' };
+
+      function formatSize(bytes) {
+        const units = ['B','KB','MB','GB'];
+        let i = 0; let n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return n.toFixed(n < 10 && i > 0 ? 2 : 0) + ' ' + units[i];
+      }
+
+      function getOutputFileName(item) {
+        const name = item.name.replace(/\.[^.]+$/, '');
+        const target = state.option.format.target;
+        let ext = target ? target : item.blob.type.split('/')[1];
+        if (ext === 'jpeg') ext = 'jpg';
+        return name + '-已压缩.' + ext;
+      }
+
+      function updateProgressHint() {
+        const total = state.items.length;
+        let done = 0, origin = 0, out = 0;
+        state.items.forEach(i => { origin += i.blob.size; if (i.compress) { done++; out += i.compress.blob.size; } });
+        const percent = total ? Math.ceil(done * 100 / total) : 0;
+        const rate = origin ? Math.abs(((out - origin) * 100) / origin).toFixed(2) : '0.00';
+        progressHintEl.textContent = `完成: ${done}/${total} (${percent}%), 体积变化: ${rate}%`;
+      }
+
+      function renderList() {
+        listEl.innerHTML = '';
+        state.items.slice().reverse().forEach(info => {
+          const row = document.createElement('div'); row.className = 'item';
+          const left = document.createElement('div'); left.className = 'meta';
+          const thumb = document.createElement('div'); thumb.className = 'thumb';
+          const img = document.createElement('img'); img.src = info.previewSrc || info.src; thumb.appendChild(img);
+          const text = document.createElement('div'); text.style.flex = '1';
+          const name = document.createElement('div'); name.className = 'name'; name.textContent = info.name; text.appendChild(name);
+          const tags = document.createElement('div'); tags.className = 'row';
+          const typeTag = document.createElement('span'); typeTag.className = 'tag'; typeTag.textContent = (info.blob.type.split('/')[1] || '').toUpperCase(); tags.appendChild(typeTag);
+          const wh = document.createElement('span'); wh.textContent = info.width && info.height ? `${info.width}*${info.height}` : '-'; tags.appendChild(wh);
+          const size = document.createElement('span'); size.textContent = formatSize(info.blob.size); tags.appendChild(size);
+          text.appendChild(tags);
+          left.appendChild(thumb); left.appendChild(text);
+
+          const right = document.createElement('div'); right.className = 'right';
+          if (info.compress) {
+            const delta = (((info.compress.blob.size - info.blob.size) / info.blob.size) * 100).toFixed(2);
+            const deltaEl = document.createElement('div'); deltaEl.style.textAlign = 'right';
+            const d1 = document.createElement('div'); d1.style.fontWeight = '700'; d1.style.fontSize = '13px'; d1.textContent = `${delta}%`;
+            d1.style.color = (info.blob.size > info.compress.blob.size) ? '#16a34a' : '#dc2626';
+            const d2 = document.createElement('div'); d2.className = 'small'; d2.style.color = d1.style.color; d2.textContent = formatSize(info.compress.blob.size);
+            deltaEl.appendChild(d1); deltaEl.appendChild(d2);
+          const dlBtn = document.createElement('button'); dlBtn.className = 'button primary'; dlBtn.title = '下载压缩结果'; dlBtn.textContent = '下载';
+          dlBtn.addEventListener('click', () => {
+            const a = document.createElement('a'); a.href = info.compress.src; a.download = getOutputFileName(info); document.body.appendChild(a); a.click(); a.remove();
+          });
+          right.appendChild(deltaEl); right.appendChild(dlBtn);
+            const cmpBtn = document.createElement('button'); cmpBtn.className = 'button'; cmpBtn.title = '对比前后效果'; cmpBtn.textContent = '对比';
+            cmpBtn.addEventListener('click', () => openCompare(info));
+            right.appendChild(cmpBtn);
+          const delBtn = document.createElement('button'); delBtn.className = 'button danger'; delBtn.title = '删除该图片'; delBtn.textContent = '删除';
+          delBtn.addEventListener('click', () => removeItem(info.key));
+          right.appendChild(delBtn);
+          } else {
+            const sp = document.createElement('span'); sp.className = 'small'; sp.textContent = '处理中...'; right.appendChild(sp);
+          }
+
+          row.appendChild(left); row.appendChild(right);
+          listEl.appendChild(row);
+        });
+        updateProgressHint();
+        const downloadable = state.items.some(i => !!i.compress);
+        downloadAllBtn.disabled = !downloadable;
+      }
+
+      async function getImageDimension(blob) {
+        const url = URL.createObjectURL(blob);
+        try {
+          const img = new Image(); img.crossOrigin = 'Anonymous';
+          const size = await new Promise((resolve, reject) => {
+            img.onload = () => resolve({ width: img.width, height: img.height });
+            img.onerror = reject; img.src = url;
+          });
+          return size;
+        } finally { URL.revokeObjectURL(url); }
+      }
+
+      async function compressItem(info) {
+        const target = state.option.format.target;
+        const isJpeg = target === 'jpeg';
+        const type = target ? Mimes[target] : info.blob.type;
+        const bmp = await createImageBitmap(info.blob);
+        const canvas = document.createElement('canvas'); canvas.width = bmp.width; canvas.height = bmp.height;
+        const ctx = canvas.getContext('2d');
+        if (isJpeg) { ctx.fillStyle = state.option.format.transparentFill; ctx.fillRect(0,0,canvas.width,canvas.height); }
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, type, state.option.jpeg.quality));
+        const src = URL.createObjectURL(blob);
+        info.width = canvas.width; info.height = canvas.height;
+        info.compress = { width: canvas.width, height: canvas.height, blob, src };
+      }
+
+      function openCompare(info) {
+        compareItemKey = info.key;
+        compareTitle.textContent = `${info.name}（原始 ${formatSize(info.blob.size)} → 压缩后 ${formatSize(info.compress.blob.size)}）`;
+        compareBottomImg.src = info.src;
+        compareTopImg.src = info.compress.src;
+        setComparePercent(50);
+        compareBackdrop.classList.remove('hidden');
+      }
+      function closeCompare() {
+        compareItemKey = null;
+        compareBackdrop.classList.add('hidden');
+      }
+      compareCloseBtn.addEventListener('click', closeCompare);
+      compareBackdrop.addEventListener('click', (e) => { if (e.target === compareBackdrop) closeCompare(); });
+      function setComparePercent(v) {
+        let val = Math.max(0, Math.min(100, Math.round(v)));
+        comparePercent.textContent = val + '%';
+        compareTopWrap.style.setProperty('--cmp', val + '%');
+        compareHandle.style.left = val + '%';
+      }
+      function updateFromClientX(x) {
+        const rect = compareBox.getBoundingClientRect();
+        const val = ((x - rect.left) / rect.width) * 100;
+        setComparePercent(val);
+      }
+      let dragging = false;
+      compareHandle.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
+      document.addEventListener('mousemove', (e) => { if (dragging) updateFromClientX(e.clientX); });
+      document.addEventListener('mouseup', () => { dragging = false; });
+      compareHandle.addEventListener('touchstart', (e) => { dragging = true; });
+      document.addEventListener('touchmove', (e) => { if (dragging) { const t = e.touches[0]; updateFromClientX(t.clientX); } });
+      document.addEventListener('touchend', () => { dragging = false; });
+      compareBox.addEventListener('click', (e) => { updateFromClientX(e.clientX); });
+
+      async function addFiles(files) {
+        for (const file of files) {
+          if (!file.type.startsWith('image/')) continue;
+          const src = URL.createObjectURL(file);
+          const info = { key: Date.now()+Math.random(), name: file.name, blob: file, width: 0, height: 0, src };
+          const { width, height } = await getImageDimension(file);
+          info.width = width; info.height = height;
+          state.items.push(info);
+          info.previewSrc = info.src;
+          compressItem(info).then(() => { renderList(); }).catch(() => { renderList(); });
+        }
+        renderList();
+      }
+
+      function setQuality(value) {
+        const percent = value / 100; state.option.jpeg.quality = percent; qualityText.textContent = String(value);
+      }
+
+      function setFormat(value) {
+        if (value !== 'auto') state.option.format.target = value; else state.option.format.target = undefined;
+      }
+
+      async function recompressAll() {
+        for (const info of state.items) {
+          if (info.compress?.src) { URL.revokeObjectURL(info.compress.src); }
+          info.compress = undefined;
+          await compressItem(info);
+        }
+        renderList();
+      }
+
+      document.getElementById('clearBtn').addEventListener('click', () => {
+        state.items.forEach(i => { if (i.src) URL.revokeObjectURL(i.src); if (i.compress?.src) URL.revokeObjectURL(i.compress.src); });
+        state.items = []; renderList();
+      });
+      document.getElementById('recompressBtn').addEventListener('click', recompressAll);
+      let recompressTimer = null;
+      function scheduleRecompress(delay = 300) {
+        if (recompressTimer) clearTimeout(recompressTimer);
+        recompressTimer = setTimeout(() => { recompressAll(); }, delay);
+      }
+      qualityRange.addEventListener('input', e => { setQuality(Number(e.target.value)); scheduleRecompress(250); });
+      formatSelect.addEventListener('change', e => setFormat(e.target.value));
+      fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files || [])));
+
+      dropArea.addEventListener('click', () => fileInput.click());
+      dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('highlight'); });
+      dropArea.addEventListener('dragleave', () => dropArea.classList.remove('highlight'));
+      dropArea.addEventListener('drop', e => {
+        e.preventDefault(); dropArea.classList.remove('highlight');
+        const files = Array.from(e.dataTransfer?.files || []);
+        addFiles(files);
+      });
+      document.addEventListener('paste', e => {
+        const items = Array.from(e.clipboardData?.items || []);
+        const files = [];
+        items.forEach(it => { if (it.kind === 'file') { const f = it.getAsFile(); if (f && f.type.startsWith('image/')) files.push(f); } });
+        if (files.length) addFiles(files);
+      });
+
+      function toDosTime(date) {
+        const d = date || new Date();
+        const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (Math.floor(d.getSeconds() / 2));
+        const dosDate = (((d.getFullYear() - 1980) & 0x7f) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+        return { dosTime, dosDate };
+      }
+      function crc32(buf) {
+        let c = ~0; const table = crc32.table || (crc32.table = (function(){
+          let t = new Uint32Array(256);
+          for (let i=0; i<256; i++) { let r=i; for (let j=0; j<8; j++) r = (r & 1) ? (0xEDB88320 ^ (r >>> 1)) : (r >>> 1); t[i]=r; }
+          return t;
+        })());
+        for (let i=0; i<buf.length; i++) c = table[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+        return (~c) >>> 0;
+      }
+      function u16(n) { const a = new Uint8Array(2); a[0] = n & 0xFF; a[1] = (n >>> 8) & 0xFF; return a; }
+      function u32(n) { const a = new Uint8Array(4); a[0] = n & 0xFF; a[1] = (n >>> 8) & 0xFF; a[2] = (n >>> 16) & 0xFF; a[3] = (n >>> 24) & 0xFF; return a; }
+      function concat(arrays) {
+        let len = 0; arrays.forEach(a => len += a.length);
+        const out = new Uint8Array(len); let off = 0;
+        arrays.forEach(a => { out.set(a, off); off += a.length; });
+        return out;
+      }
+      async function toZipBlob() {
+        const locals = []; const centrals = [];
+        let offset = 0; const now = new Date(); const { dosTime, dosDate } = toDosTime(now);
+        const entries = [];
+        for (const info of state.items) {
+          if (!info.compress?.blob) continue;
+          const name = getOutputFileName(info);
+          const nameBytes = new TextEncoder().encode(name);
+          const data = new Uint8Array(await info.compress.blob.arrayBuffer());
+          const crc = crc32(data);
+          const localHeader = concat([
+            u32(0x04034b50),
+            u16(20),
+            u16(0),
+            u16(0),
+            u16(dosTime), u16(dosDate),
+            u32(crc), u32(data.length), u32(data.length),
+            u16(nameBytes.length), u16(0),
+            nameBytes,
+          ]);
+          locals.push(localHeader, data);
+          const localSize = localHeader.length + data.length;
+          const entry = { nameBytes, crc, size: data.length, offset, dosTime, dosDate };
+          entries.push(entry);
+          offset += localSize;
+        }
+        let centralSize = 0;
+        for (const e of entries) {
+          const centralHeader = concat([
+            u32(0x02014b50),
+            u16(20), u16(20),
+            u16(0), u16(0),
+            u16(e.dosTime), u16(e.dosDate),
+            u32(e.crc), u32(e.size), u32(e.size),
+            u16(e.nameBytes.length), u16(0), u16(0),
+            u16(0), u16(0),
+            u32(0),
+            u32(e.offset),
+            e.nameBytes,
+          ]);
+          centrals.push(centralHeader);
+          centralSize += centralHeader.length;
+        }
+        const centralStart = offset;
+        const end = concat([
+          u32(0x06054b50),
+          u16(0), u16(0),
+          u16(entries.length), u16(entries.length),
+          u32(centralSize), u32(centralStart),
+          u16(0),
+        ]);
+        const all = concat([...locals, ...centrals, end]);
+        return new Blob([all], { type: 'application/zip' });
+      }
+      downloadAllBtn.addEventListener('click', async () => {
+        downloadAllBtn.disabled = true;
+        try {
+          const blob = await toZipBlob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = '批量下载-已压缩.zip'; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } finally {
+          renderList();
+        }
+      });
+
+      function removeItem(key) {
+        const idx = state.items.findIndex(i => i.key === key);
+        if (idx >= 0) {
+          const item = state.items[idx];
+          if (item.src) URL.revokeObjectURL(item.src);
+          if (item.compress?.src) URL.revokeObjectURL(item.compress.src);
+          state.items.splice(idx, 1);
+          renderList();
+        }
+      }
+
+      setQuality(Number(qualityRange.value)); setFormat(formatSelect.value);
+      renderList();
+    </script>
+  </body>
+</html>
+    </template>
+
     <!-- 内嵌模板：手写签名PNG -->
     <template id="tpl-sign"><!-- BEGIN: 手写签名png.html -->
 <!DOCTYPE html>
@@ -1318,8 +1794,8 @@
     <style>
       html, body { height: 100%; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Microsoft YaHei", "PingFang SC", sans-serif; background: #ffffff; color: #222; }
-      .wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
-      .msg { font-size: 18px; color: #555; }
+      。wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+      。msg { font-size: 18px; color: #555; }
     </style>
   </head>
   <body>
