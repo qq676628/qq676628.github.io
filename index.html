@@ -1116,7 +1116,9 @@
           const { width, height } = await getImageDimension(file);
           info.width = width; info.height = height;
           state.items.push(info);
+          // 预览缩略图
           info.previewSrc = info.src;
+          // 异步压缩
           compressItem(info).then(() => { renderList(); }).catch(() => { renderList(); });
         }
         renderList();
@@ -1153,6 +1155,7 @@
       formatSelect.addEventListener('change', e => setFormat(e.target.value));
       fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files || [])));
 
+      // 拖拽/点击/粘贴
       dropArea.addEventListener('click', () => fileInput.click());
       dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('highlight'); });
       dropArea.addEventListener('dragleave', () => dropArea.classList.remove('highlight'));
@@ -1168,6 +1171,7 @@
         if (files.length) addFiles(files);
       });
 
+      // 简易 ZIP 生成（Store，无压缩）
       function toDosTime(date) {
         const d = date || new Date();
         const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (Math.floor(d.getSeconds() / 2));
@@ -1204,7 +1208,7 @@
           const localHeader = concat([
             u32(0x04034b50),
             u16(20),
-            u16(0),
+            u16(0x0800),
             u16(0),
             u16(dosTime), u16(dosDate),
             u32(crc), u32(data.length), u32(data.length),
@@ -1222,7 +1226,7 @@
           const centralHeader = concat([
             u32(0x02014b50),
             u16(20), u16(20),
-            u16(0), u16(0),
+            u16(0x0800), u16(0),
             u16(e.dosTime), u16(e.dosDate),
             u32(e.crc), u32(e.size), u32(e.size),
             u16(e.nameBytes.length), u16(0), u16(0),
@@ -1268,11 +1272,13 @@
         }
       }
 
+      // 初始化
       setQuality(Number(qualityRange.value)); setFormat(formatSelect.value);
       renderList();
     </script>
   </body>
 </html>
+
     </template>
 
     <!-- 内嵌模板：手写签名PNG -->
