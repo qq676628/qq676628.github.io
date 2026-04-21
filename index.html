@@ -1240,6 +1240,7 @@
     }
     @media (max-width: 1080px){
       .app{grid-template-columns:1fr}
+      textarea{min-height:150px}
       .paperViewport{width: 100%; border-radius: 14px}
       .doc{padding: 22mm 14mm 18mm}
       .topbar{align-items:flex-start; flex-direction:column}
@@ -1366,7 +1367,7 @@
                   <div class="footer">
                     <div class="bank" id="vBank"></div>
                     <div class="date" id="vDate"></div>
-                    <img class="sealStamp" id="sealStamp" alt="印章" src="章.svg" crossorigin="anonymous" />
+                    <img class="sealStamp" id="sealStamp" alt="印章" src="https://raw.githubusercontent.com/qq676628/Mr.chen-Tools/main/%E7%AB%A0.svg" crossorigin="anonymous" />
                   </div>
                 </div>
               </div>
@@ -1421,7 +1422,7 @@
       w: 297 * 96 / 25.4,
       h: 210 * 96 / 25.4,
     }
-    const SEAL_REMOTE_URL = 'https://raw.githubusercontent.com/qq676628/Mr.chen-Tools/refs/heads/main/%E7%AB%A0.svg'
+    const SEAL_REMOTE_URL = 'https://raw.githubusercontent.com/qq676628/Mr.chen-Tools/main/%E7%AB%A0.svg'
 
     function waitImage(img){
       if(!img) return Promise.resolve()
@@ -1451,10 +1452,12 @@
         return els.sealStamp.naturalWidth > 0
       }
       try{
+        const maybeCurrent = String(els.sealStamp.currentSrc || els.sealStamp.src || '').trim()
         const urls = [
+          ...(maybeCurrent ? [maybeCurrent] : []),
           SEAL_REMOTE_URL,
           new URL('章.svg', window.location.href).toString(),
-        ]
+        ].filter(Boolean)
         for(const url of urls){
           try{
             const resp = await fetch(url, { cache: 'force-cache', mode: 'cors' })
@@ -1483,7 +1486,13 @@
     }
 
     function blobFromCanvas(canvas, type, quality){
-      return new Promise((resolve)=> canvas.toBlob(resolve, type, quality))
+      return new Promise((resolve, reject)=>{
+        try{
+          canvas.toBlob(resolve, type, quality)
+        }catch(e){
+          reject(e)
+        }
+      })
     }
     function loadImageFromUrl(url){
       return new Promise((resolve, reject)=>{
@@ -1523,11 +1532,11 @@
     async function copyPaperAsImage(){
       generate()
       updatePaperScale()
-      if(els.paper.classList.contains('sealOn')){
-        const ok = await ensureSealDataUrl()
-        if(!ok){
-          throw new Error('印章加载失败')
-        }
+      const wantSeal = els.paper.classList.contains('sealOn')
+      let sealReady = true
+      if(wantSeal){
+        await waitImage(els.sealStamp)
+        sealReady = await ensureSealDataUrl()
       }
 
       const w = Math.round(A4_LANDSCAPE.w)
@@ -1562,32 +1571,54 @@
         if(typeof h2c !== 'function') throw new Error('html2canvas 未加载')
         const targetWidth = 1600
         const exportScale = Math.max(.5, Math.min(3, targetWidth / w))
-        const canvas = await h2c(paper, {
-          scale: exportScale,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false
-        })
-        const png = await blobFromCanvas(canvas, 'image/png')
-        if(!png) throw new Error('PNG生成失败')
+        let png = null
+        try{
+          const canvas = await h2c(paper, {
+            scale: exportScale,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false
+          })
+          png = await blobFromCanvas(canvas, 'image/png')
+          if(!png) throw new Error('PNG生成失败')
+        }catch(e){
+          if(wantSeal && stamp){
+            stamp.style.display = 'none'
+            const canvas2 = await h2c(paper, {
+              scale: exportScale,
+              useCORS: true,
+              backgroundColor: '#ffffff',
+              logging: false
+            })
+            png = await blobFromCanvas(canvas2, 'image/png')
+            if(!png) throw new Error('PNG生成失败')
+            els.statusBadge.textContent = sealReady ? '已复制图片（印章导出受限）' : '已复制图片（未包含印章）'
+            window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 2400)
+          }else{
+            throw e
+          }
+        }
 
         const support = clipboardImageSupport()
         if(support.ok){
           try{
             await tryWriteClipboardPng(png)
-            els.statusBadge.textContent = '已复制图片'
+            if(wantSeal && !sealReady) els.statusBadge.textContent = '已复制图片（未包含印章）'
+            else els.statusBadge.textContent = '已复制图片'
             window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 1800)
             return
           }catch(e){
             downloadBlob(png, '通知单.png')
             const msg = (e && e.name) ? e.name : '复制被阻止'
-            els.statusBadge.textContent = `已下载PNG（${msg}）`
+            if(wantSeal && !sealReady) els.statusBadge.textContent = `已下载PNG（未包含印章，${msg}）`
+            else els.statusBadge.textContent = `已下载PNG（${msg}）`
             window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 2400)
             return
           }
         }
         downloadBlob(png, '通知单.png')
-        els.statusBadge.textContent = `已下载PNG（${support.reason}）`
+        if(wantSeal && !sealReady) els.statusBadge.textContent = `已下载PNG（未包含印章，${support.reason}）`
+        else els.statusBadge.textContent = `已下载PNG（${support.reason}）`
         window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 3000)
       }finally{
         host.remove()
@@ -1767,10 +1798,17 @@
       els.docDate.value = formatCNDate(new Date())
       els.vBank.textContent = '中国工商银行股份有限公司重庆沙坪坝支行'
       els.vDate.textContent = els.docDate.value?.trim() || ''
-      els.sealToggle.checked = false
-      setSealEnabled(false)
-      renderSealButton(false)
-      ensureSealDataUrl()
+      els.sealToggle.checked = true
+      setSealEnabled(true)
+      renderSealButton(true)
+      ensureSealDataUrl().then((ok)=>{
+        if(ok) return
+        waitImage(els.sealStamp).then(()=>{
+          if(els.sealStamp && els.sealStamp.naturalWidth > 0) return
+          els.statusBadge.textContent = '印章加载失败'
+          window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 2400)
+        })
+      })
       generate()
       updatePaperScale()
       window.requestAnimationFrame(updatePaperScale)
@@ -1811,8 +1849,11 @@
       if(on){
         ensureSealDataUrl().then((ok)=>{
           if(ok) return
-          els.statusBadge.textContent = '印章加载失败'
-          window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 2400)
+          waitImage(els.sealStamp).then(()=>{
+            if(els.sealStamp && els.sealStamp.naturalWidth > 0) return
+            els.statusBadge.textContent = '印章加载失败'
+            window.setTimeout(()=>{ els.statusBadge.textContent = '可打印' }, 2400)
+          })
         })
       }
     })
@@ -1832,6 +1873,7 @@
   </script>
 </body>
 </html>
+
 
 
     </template>
