@@ -2815,6 +2815,9 @@
       
           .preview-pane {
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
           }
       
           .preview-meta {
@@ -2839,7 +2842,9 @@
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            overflow: visible;
+            overflow-x: auto;
+            overflow-y: auto;
+            min-height: 0;
             padding: 18px;
             background:
               radial-gradient(900px 500px at 70% 10%, rgba(255, 255, 255, 0.06), transparent 55%),
@@ -2847,8 +2852,8 @@
           }
       
           .sheet-scale {
-            transform-origin: top center;
-            will-change: transform;
+            position: relative;
+            flex: 0 0 auto;
           }
       
           .sheet {
@@ -2863,8 +2868,10 @@
             padding-left: var(--page-margin-left);
             background: var(--paper);
             box-shadow: 0 26px 60px rgba(31, 31, 31, 0.12);
-            overflow: hidden;
+            overflow: visible;
             border-radius: 10px;
+            transform-origin: top center;
+            will-change: transform;
           }
       
           .sheet,
@@ -3218,7 +3225,8 @@
             }
       
             .sheet-scale {
-              transform: none !important;
+              width: auto !important;
+              height: auto !important;
             }
       
             .sheet-viewport {
@@ -3229,6 +3237,7 @@
               width: var(--page-width);
               box-shadow: none;
               margin: 0;
+              transform: none !important;
             }
           }
         </style>
@@ -4842,7 +4851,18 @@
       
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imageData, "JPEG", 0, 0, pageWidth, pageHeight, undefined, "MEDIUM");
+            const imageAspect = workingCanvas.width / workingCanvas.height;
+            let renderWidth = pageWidth;
+            let renderHeight = renderWidth / imageAspect;
+
+            if (renderHeight > pageHeight) {
+              renderHeight = pageHeight;
+              renderWidth = renderHeight * imageAspect;
+            }
+
+            const offsetX = (pageWidth - renderWidth) / 2;
+            const offsetY = (pageHeight - renderHeight) / 2;
+            pdf.addImage(imageData, "JPEG", offsetX, offsetY, renderWidth, renderHeight, undefined, "MEDIUM");
             return pdf.output("blob");
           }
       
@@ -4908,50 +4928,25 @@
           }
       
           function updatePreviewScale() {
-            const availableWidth = sheetViewport.clientWidth;
+            const viewportStyle = window.getComputedStyle(sheetViewport);
+            const horizontalPadding =
+              Number.parseFloat(viewportStyle.paddingLeft) + Number.parseFloat(viewportStyle.paddingRight);
+            const availableWidth = Math.max(0, sheetViewport.clientWidth - horizontalPadding);
             const scale = availableWidth > 0 ? Math.min(1, availableWidth / A4_WIDTH_PX) : 1;
-            sheetScale.style.transform = `scale(${scale})`;
-            sheetViewport.style.height = `${A4_HEIGHT_PX * scale}px`;
+            const contentHeight = Math.max(A4_HEIGHT_PX, Math.ceil(sheet.scrollHeight));
+            const scaledHeight = contentHeight * scale;
+            const viewportTop = sheetViewport.getBoundingClientRect().top;
+            const availableHeight = Math.max(320, Math.floor(window.innerHeight - viewportTop - 20));
+
+            sheetScale.style.width = `${A4_WIDTH_PX * scale}px`;
+            sheetScale.style.height = `${scaledHeight}px`;
+            sheet.style.transform = `scale(${scale})`;
+            sheetViewport.style.height = `${Math.min(scaledHeight, availableHeight)}px`;
           }
       
           async function exportSheetToPdf(filename) {
             if (typeof html2canvas !== "function" || !window.jspdf || !window.jspdf.jsPDF) {
               throw new Error("PDF 导出库未加载");
-            }
-      
-            function normalizeCanvasToA4(sourceCanvas) {
-              const targetAspect = A4_WIDTH_PX / A4_HEIGHT_PX;
-              const sourceAspect = sourceCanvas.width / sourceCanvas.height;
-              if (!Number.isFinite(sourceAspect) || sourceCanvas.width < 2 || sourceCanvas.height < 2) {
-                return sourceCanvas;
-              }
-              if (Math.abs(sourceAspect - targetAspect) < 0.001) {
-                return sourceCanvas;
-              }
-      
-              let sw = sourceCanvas.width;
-              let sh = sourceCanvas.height;
-              let sx = 0;
-              let sy = 0;
-      
-              if (sourceAspect > targetAspect) {
-                sw = Math.round(sourceCanvas.height * targetAspect);
-                sx = Math.round((sourceCanvas.width - sw) / 2);
-              } else {
-                sh = Math.round(sourceCanvas.width / targetAspect);
-                sy = Math.round((sourceCanvas.height - sh) / 2);
-              }
-      
-              const targetCanvas = document.createElement("canvas");
-              targetCanvas.width = sw;
-              targetCanvas.height = sh;
-              const context = targetCanvas.getContext("2d", { alpha: false });
-              context.imageSmoothingEnabled = true;
-              context.imageSmoothingQuality = "high";
-              context.fillStyle = "#ffffff";
-              context.fillRect(0, 0, sw, sh);
-              context.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
-              return targetCanvas;
             }
       
             const PDF_MAX_BYTES = 350 * 1024;
@@ -4973,20 +4968,20 @@
             host.style.left = "-100000px";
             host.style.top = "0";
             host.style.width = `${A4_WIDTH_PX}px`;
-            host.style.height = `${A4_HEIGHT_PX}px`;
+            host.style.height = "auto";
             host.style.background = "#ffffff";
             host.style.pointerEvents = "none";
             host.style.opacity = "1";
-            host.style.overflow = "hidden";
+            host.style.overflow = "visible";
       
             const exportSheet = sheet.cloneNode(true);
             exportSheet.style.width = `${A4_WIDTH_PX}px`;
-            exportSheet.style.height = `${A4_HEIGHT_PX}px`;
+            exportSheet.style.height = "auto";
             exportSheet.style.minHeight = `${A4_HEIGHT_PX}px`;
             exportSheet.style.margin = "0";
             exportSheet.style.boxShadow = "none";
             exportSheet.style.transform = "none";
-            exportSheet.style.overflow = "hidden";
+            exportSheet.style.overflow = "visible";
             exportSheet.style.fontFamily = '"Source Han Serif CN VF", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "宋体", "NSimSun", serif';
             exportSheet.style.webkitTextSizeAdjust = "100%";
             exportSheet.style.textSizeAdjust = "100%";
@@ -5009,15 +5004,17 @@
                 await document.fonts.ready;
               }
               await waitForImages(exportSheet);
+              const exportHeight = Math.max(A4_HEIGHT_PX, Math.ceil(exportSheet.scrollHeight));
+              host.style.height = `${exportHeight}px`;
       
               const canvas = await html2canvas(exportSheet, {
                 scale: 3,
                 useCORS: true,
                 backgroundColor: "#ffffff",
                 width: A4_WIDTH_PX,
-                height: A4_HEIGHT_PX,
+                height: exportHeight,
                 windowWidth: Math.ceil(A4_WIDTH_PX),
-                windowHeight: Math.ceil(A4_HEIGHT_PX),
+                windowHeight: Math.ceil(exportHeight),
                 logging: false,
                 onclone: (clonedDoc) => {
                   clonedDoc.documentElement.style.webkitTextSizeAdjust = "100%";
@@ -5030,16 +5027,25 @@
                   clonedSheet.style.fontFamily = '"Source Han Serif CN VF", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "宋体", "NSimSun", serif';
                   clonedSheet.style.webkitTextSizeAdjust = "100%";
                   clonedSheet.style.textSizeAdjust = "100%";
+                  clonedSheet.style.height = "auto";
+                  clonedSheet.style.minHeight = `${A4_HEIGHT_PX}px`;
+                  clonedSheet.style.overflow = "visible";
+                  clonedSheet.style.transform = "none";
                   clonedSheet.querySelectorAll("*").forEach((node) => {
                     node.style.fontFamily = '"Source Han Serif CN VF", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "宋体", "NSimSun", serif';
                   });
+
+                  const clonedTableScroll = clonedSheet.querySelector(".table-scroll");
+                  if (clonedTableScroll) {
+                    clonedTableScroll.style.minWidth = "0";
+                    clonedTableScroll.style.overflow = "visible";
+                  }
                 },
               });
       
-              const normalizedCanvas = normalizeCanvasToA4(canvas);
               let pdfBlob = null;
               for (const attempt of compressionAttempts) {
-                pdfBlob = buildPdfBlobFromCanvas(normalizedCanvas, attempt.ratio, attempt.quality);
+                pdfBlob = buildPdfBlobFromCanvas(canvas, attempt.ratio, attempt.quality);
                 if (pdfBlob.size <= PDF_MAX_BYTES) {
                   break;
                 }
@@ -5169,6 +5175,7 @@
         </script>
       </body>
       </html>
+
       
     </template>
     <template id="tpl-compress">
