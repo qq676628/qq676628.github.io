@@ -1156,7 +1156,7 @@
                   // 支持直接复制 JPEG 时的压缩逻辑
                   finalBlob = await compressForClipboard('image/jpeg');
                   await tryWriteClipboardImage(finalBlob);
-                  setStatus(`已复制 500KB 以内的 JPG 到剪贴板（体积: ${(finalBlob.size / 1024).toFixed(1)}KB）。`, 'success');
+                  setStatus(`已复制 350KB 以内的 JPG 到剪贴板（体积: ${(finalBlob.size / 1024).toFixed(1)}KB）。`, 'success');
                   return;
                 } catch (error) {
                   console.warn("JPEG 剪贴板写入失败，降级回传统 PNG...");
@@ -1166,7 +1166,7 @@
               // 绝大多数标准浏览器（如 Chrome/Edge 等）运行到这一步：执行 PNG 动态缩放压限
               finalBlob = await compressForClipboard('image/png');
               await tryWriteClipboardImage(finalBlob);
-              setStatus(`已复制 500KB 以内的 PNG 到剪贴板（由于系统限制已自动转为PNG，体积: ${(finalBlob.size / 1024).toFixed(1)}KB）。`, 'success');
+              setStatus(`已复制 350KB 以内的 PNG 到剪贴板（由于系统限制已自动转为PNG，体积: ${(finalBlob.size / 1024).toFixed(1)}KB）。`, 'success');
       
             } catch (error) {
               alert(error.message || '复制失败');
