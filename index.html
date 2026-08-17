@@ -485,7 +485,7 @@
                   </div>
                   <div class="footer">
                     <div class="action-row">
-                      <button class="btn btn-primary" id="downloadBtn" disabled>下载 JPG（≤500KB）</button>
+                      <button class="btn btn-primary" id="downloadBtn" disabled>下载 JPG（≤350KB）</button>
                       <button class="btn btn-secondary" id="copyBtn" disabled>复制图片</button>
                     </div>
                     <span class="msg" id="statusMsg">请先上传两张图片并进行裁切/旋转设置。</span>
@@ -506,7 +506,7 @@
       
         <script>
           // 配置
-          const MAX_BYTES = 500 * 1024;
+          const MAX_BYTES = 350 * 1024;
           const MARGIN_LR = 40; 
           const MARGIN_TB = 40; 
           const GAP_VB = 20;    
@@ -1112,7 +1112,7 @@
           function updateFinal(){ composeA4AndEstimate(); }
       
           downloadBtn.addEventListener('click', async ()=>{
-            const idleText = '下载 JPG（≤500KB）';
+            const idleText = '下载 JPG（≤350KB）';
             setBusyState(downloadBtn, true, '下载中...', idleText);
             copyBtn.disabled = true;
             try {
